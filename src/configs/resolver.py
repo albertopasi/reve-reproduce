@@ -5,6 +5,10 @@ import os
 import torch
 from omegaconf import OmegaConf
 
+# Absolute path to the repo root (two levels up from src/configs/), fixed at import time
+# so it is stable even after Hydra changes the working directory.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 # undefined paths default to . (current directory)
 def register_resolvers():
@@ -26,6 +30,9 @@ def register_resolvers():
     gpu_count: ${gpu_count:}
     ```
     """
+
+    if not OmegaConf.has_resolver("repo_root"):
+        OmegaConf.register_new_resolver("repo_root", lambda: _REPO_ROOT)
 
     if not OmegaConf.has_resolver("cwd"):
         OmegaConf.register_new_resolver("cwd", os.getcwd)

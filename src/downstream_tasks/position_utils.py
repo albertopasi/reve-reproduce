@@ -1,19 +1,36 @@
 """Utilities to resolve electrode names or files into 3D position tensors."""
 
+import os
 from functools import lru_cache
 
 import numpy as np
 import torch
 from transformers import AutoModel
 
+# Resolve the positions model path: prefer the local snapshot if present,
+# otherwise fall back to downloading from HuggingFace Hub.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_LOCAL_POSITIONS = os.path.join(_REPO_ROOT, "models", "reve-positions")
+
+
+def _resolve_positions_model_id():
+    """Priority: REVE_POSITIONS_MODEL env var > repo-local models/ > HuggingFace Hub."""
+    env_path = os.environ.get("REVE_POSITIONS_MODEL", "")
+    if env_path and os.path.isdir(env_path):
+        return env_path
+    if os.path.isdir(_LOCAL_POSITIONS):
+        return _LOCAL_POSITIONS
+    return "brain-bzh/reve-positions"
+
 
 @lru_cache(maxsize=1)
 def _get_position_model():
+    model_id = _resolve_positions_model_id()
+    print(f"Loading position model from: {model_id}")
     return AutoModel.from_pretrained(
-        "brain-bzh/reve-positions",
+        model_id,
         trust_remote_code=True,
         dtype="auto",
-        cache_dir=".cache",
     )
 
 

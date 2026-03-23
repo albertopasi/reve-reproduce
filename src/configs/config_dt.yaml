@@ -12,7 +12,7 @@ mode: train # train, eval_only, debug
 
 ############### Modify this section ################
 
-pretrained_path: ${env:SCRATCH}/pretrained_models/reve_base.pth
+pretrained_path: hf:${repo_root:}/models/reve-base
 cache_dir: .cache
 
 #####################################################
@@ -34,7 +34,7 @@ loader:
   persistent_workers: True
   prefetch_factor: 2
 
-output_dir: ${env:SCRATCH}/checkpoints/${task.name}
+output_dir: ${repo_root:}/outputs/checkpoints/${task.name}
 
 lora:
   enabled: True

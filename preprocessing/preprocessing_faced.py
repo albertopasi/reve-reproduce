@@ -49,6 +49,7 @@ for files_key, files_list in files_dict.items():
         for i, (samples, label) in enumerate(zip(eeg_, labels)):
             for j in range(3):
                 sample = samples[:, 10 * j : 10 * (j + 1), :]
+                sample = sample.reshape(32, -1)  # (32, 10, 200) -> (32, 2000)
                 # sample = samples[:, j : (j + 1), :].squeeze(1)
                 sample_key = f"{file}-{i}-{j}"
                 print(sample_key)

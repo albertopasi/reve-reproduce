@@ -11,7 +11,8 @@ import hydra
 import idr_torch
 import torch
 import torch.distributed as dist
-from omegaconf import DictConfig
+import wandb
+from omegaconf import DictConfig, OmegaConf
 from sklearn.metrics import average_precision_score, balanced_accuracy_score, cohen_kappa_score, f1_score, roc_auc_score
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -170,6 +171,19 @@ def train_stage(  # noqa: C901, PLR0912, PLR0913, PLR0915
         )
         print(log)
 
+        if idr_torch.is_master and wandb.run is not None:
+            wandb.log({
+                f"{stage_name}/epoch": epoch,
+                f"{stage_name}/train_loss": train_loss,
+                f"{stage_name}/val_acc": val_acc,
+                f"{stage_name}/val_balanced_acc": val_balanced_acc,
+                f"{stage_name}/val_f1": val_f1,
+                f"{stage_name}/val_kappa": val_cohen_kappa,
+                f"{stage_name}/lr": lr_curr,
+                f"{stage_name}/best_val_balanced_acc": best_val,
+                f"{stage_name}/best_test_balanced_acc": best_test,
+            })
+
         if epoch > warmup_epochs:
             scheduler.step(val_acc)
         if patience > patience_limit:
@@ -309,8 +323,9 @@ def main(args):  # noqa: C901, PLR0912, PLR0915
             world_size=idr_torch.world_size,
             rank=idr_torch.rank,
         )
-    device = f"cuda:{idr_torch.local_rank}"
-    torch.cuda.set_device(device)
+    device = f"cuda:{idr_torch.local_rank}" if torch.cuda.is_available() else "cpu"
+    if torch.cuda.is_available():
+        torch.cuda.set_device(device)
 
     init_seed = args.seed + idr_torch.rank
     torch.manual_seed(init_seed)
@@ -318,6 +333,17 @@ def main(args):  # noqa: C901, PLR0912, PLR0915
 
     print(f"Running with task: {args.task.name}")
     print(f"Output directory: {os.getcwd()}")
+
+    # ── W&B ──────────────────────────────────────────────────────────────────
+    encoder_tag = "large" if args.encoder.transformer.embed_dim > 512 else "base"
+    run_name = f"{args.task.name.lower()}_{args.get('training_mode','lp')}_{encoder_tag}_pool{args.task.classifier.pooling}"
+    if idr_torch.is_master:
+        wandb.init(
+            project="reve-faced",
+            name=run_name,
+            config=OmegaConf.to_container(args, resolve=True),
+        )
+    # ─────────────────────────────────────────────────────────────────────────
 
     cls_query_token = None
     if args.pretrained_path and "hf:" in args.pretrained_path:
@@ -451,6 +477,9 @@ def main(args):  # noqa: C901, PLR0912, PLR0915
         else:
             torch.save(model.state_dict(), pjoin(target_dir, "model_final.pth"))
         print(f"Model saved to {target_dir}")
+
+    if idr_torch.is_master and wandb.run is not None:
+        wandb.finish()
 
     if idr_torch.size > 1 or dist.is_initialized():
         dist.destroy_process_group()
